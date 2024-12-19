@@ -13,7 +13,6 @@ from process_file import process_files, read_text, read_xlsx, download_xlsx, dis
 from infer import main
 from utils import _parse_text
 
-
 def get_file_names():
     file_names = []
     directory1 = './save_prompt_batch'

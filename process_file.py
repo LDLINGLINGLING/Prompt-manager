@@ -4,6 +4,7 @@ import asyncio
 from infer import main
 from datetime import datetime
 import os
+import concurrent.futures
 from openai import OpenAI
 openai_api_key = "token-abc123"
 openai_api_base = "http://localhost:8000/v1"
@@ -90,8 +91,8 @@ def find_missing_values(list1, list2):
     return missing_values
 
 
-def process_files(processed_text, df, param_input_top_p, param_input_temperture, param_input_max_tokens,param_input_repetition, model_selection_text, model_selection_button, task_name, pos_result='result'):
-
+def process_files(processed_text, df, param_input_top_p, param_input_temperture, param_input_max_tokens, param_input_repetition, model_selection_text, model_selection_button, task_name, pos_result='result'):
+    
     # 之后会根据选择的模型名称用字典映射为部署端的模型名称
     model_selection_v = None
     model_selection_k = None
@@ -115,52 +116,56 @@ def process_files(processed_text, df, param_input_top_p, param_input_temperture,
     if missing_values:
         return "请检查提示词与输入数据中输入项: \n {} \n 上述提示词中的待输入项未出现在输入数据中".format(", ".join(missing_values)), pd.DataFrame({'请检查': ['输入有误']})
 
-    for inx, row in df.iterrows():
-        input_dic = {}
-        if '常情常理' in task_name:
-            yishen, ershen = replace_cqcl(col_names,row)
-            input_dic['一审的文本'] = yishen
-            input_dic['二审的文本'] = ershen
-        else:
-            for col_name in col_names:
-                v = replace_value(row[col_name],col_name,task_name)
-                input_dic[col_name] = v
-            input_dic_ = {}
-            for k, v in input_dic.items():
-                input_dic_[k] =v
-            
-            # res = asyncio.run(main(processed_text, input_dic_, model_name=model_selection_k, top_p=float(param_input_top_p), temperature=float(param_input_temperture), repetition_penalty=float(param_input_repetition), model_name_v=model_selection_v))
-            # try:
+    # 定义线程池执行的任务
+    def process_row(inx, row, input_dic_, model_name, processed_text):
+        try:
             cur_instruct = input_dic_
             cur_instruct['prompt_teamplate'] = processed_text
-            print(processed_text,'   ',input_dic_)
-            res = main(client=client,input_dic=input_dic_,model=model_config[model_name],query=processed_text,top_p=float(param_input_top_p),max_tokens=float(param_input_max_tokens),presence_penalty=float(param_input_repetition),temperature=float(param_input_temperture))
-            #res, cur_instruct = asyncio.run(main(processed_text, input_dic_, model_name=model_selection_k, top_p=float(param_input_top_p), temperature=float(param_input_temperture), repetition_penalty=float(param_input_repetition), model_name_v=model_selection_v))
-            #print(res)
+            res = main(client=client, input_dic=input_dic_, model=model_config[model_name], query=processed_text,
+                       top_p=float(param_input_top_p), max_tokens=float(param_input_max_tokens),
+                       presence_penalty=float(param_input_repetition), temperature=float(param_input_temperture))
             df.loc[inx, task_name + pos_result] = res
             df.loc[inx, task_name + '_inputs'] = str(cur_instruct)
             df.loc[inx, task_name + 'prompt_template'] = processed_text
-            df.loc[inx, task_name + 'sampling_parma'] = str({'model_name':model_name,'top_p':param_input_top_p,'temperature':param_input_temperture,'repetition_penalty':param_input_repetition})
-            # except:
-            #     df.loc[inx, task_name + pos_result] = ''
-            #     df.loc[inx, task_name + '_inputs'] = 'error'
-            #     df.loc[inx, task_name + 'prompt_template'] = processed_text
-            #     df.loc[inx, task_name + 'sampling_parma'] = str({'model_name':model_name,'top_p':param_input_top_p,'temperature':param_input_temperture,'repetition_penalty':param_input_repetition})
+            df.loc[inx, task_name + 'sampling_parma'] = str({'model_name': model_name, 'top_p': param_input_top_p, 
+                                                               'temperature': param_input_temperture, 
+                                                               'repetition_penalty': param_input_repetition})
+        except Exception as e:
+            print(f"Error processing row {inx}: {e}")
+            df.loc[inx, task_name + pos_result] = ''
+            df.loc[inx, task_name + '_inputs'] = 'error'
+            df.loc[inx, task_name + 'prompt_template'] = processed_text
+            df.loc[inx, task_name + 'sampling_parma'] = str({'model_name': model_name, 'top_p': param_input_top_p, 
+                                                               'temperature': param_input_temperture, 
+                                                               'repetition_penalty': param_input_repetition})
 
+    # 创建一个线程池，限制最大线程数为32
+    with concurrent.futures.ThreadPoolExecutor(max_workers=32) as executor:
+        futures = []
+        for inx, row in df.iterrows():
+            input_dic = {}
+            if '常情常理' in task_name:
+                yishen, ershen = replace_cqcl(col_names, row)
+                input_dic['一审的文本'] = yishen
+                input_dic['二审的文本'] = ershen
+            else:
+                for col_name in col_names:
+                    v = replace_value(row[col_name], col_name, task_name)
+                    input_dic[col_name] = v
 
-    for col_name in col_names:
-        input_dic = {}
-        if '常情常理' in task_name:
-            yishen,ershen = replace_cqcl(col_names,)
+            input_dic_ = {k: v for k, v in input_dic.items()}
+            futures.append(executor.submit(process_row, inx, row, input_dic_, model_name, processed_text))
+        
+        # 等待所有线程完成
+        for future in concurrent.futures.as_completed(futures):
+            future.result()
 
+    # 替换 processed_text 中的占位符
     for key, value in input_dic_.items():
-        # 使用str.replace()方法来替换字符串中的内容
         processed_text = processed_text.replace(key, value.strip())
-    first_column_name = df.columns[0]  # 获取第一列的名称
-    df = df[[task_name + pos_result,first_column_name] + [col for col in df.columns if col not in [task_name + pos_result, first_column_name]]]
     
-    # 使用 tabulate 将 DataFrame 转换为 Markdown 表格
-    #table_md = tabulate(df, headers='keys', tablefmt='fancy_grid', showindex=False)
+    first_column_name = df.columns[0]  # 获取第一列的名称
+    df = df[[task_name + pos_result, first_column_name] + [col for col in df.columns if col not in [task_name + pos_result, first_column_name]]]
     
     return processed_text, df
     
