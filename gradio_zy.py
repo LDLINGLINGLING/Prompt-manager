@@ -198,7 +198,7 @@ def _launch_demo():
 
 
         with gr.Tab('文档'):
-            gr.Markdown("# 同时上传 TXT 和 XLSX 文件并处理示例")
+            gr.Markdown("# 同时上传 提示词模板 和 数据集 文件并批量处理")
         
             # 上传按钮放在文本框下面
             with gr.Column():
@@ -210,8 +210,8 @@ def _launch_demo():
             
             # XLSX 文件上传与显示
             with gr.Column():
-                upload_xlsx = gr.UploadButton("上传 XLSX 文件", file_types=[".xlsx"])
-                output_xlsx = gr.Dataframe(label="XLSX 文件内容", interactive=True, elem_classes='custom-dataframe')
+                upload_xlsx = gr.UploadButton("上传 XLSX\json\jsonl 文件", file_types=[".xlsx",".json","jsonl"])
+                output_xlsx = gr.Dataframe(label="数据集 文件内容", interactive=True, elem_classes='custom-dataframe')
                 # display_df = gr.Dataframe(label="XLSX 文件内容", interactive=True)
                 # output_xlsx = gr.State()
                 upload_xlsx.upload(read_xlsx, upload_xlsx, output_xlsx)
@@ -233,7 +233,7 @@ def _launch_demo():
                 param_input_temperture = gr.Textbox(label="temperture输入参数",placeholder="temperture在这里输入参数",value = 0.8)
                 param_input_max_tokens = gr.Textbox(label="max_tokens输入参数",placeholder="max_tokens在这里输入参数",value = 4096)
                 param_input_repetition = gr.Textbox(label="重复惩罚输入参数",placeholder="重复惩罚在这里输入参数",value = 1.02)
-                pos_result = gr.Textbox(label="生成结果的列名后缀",placeholder="生成结果列名的后缀",value = '_'+datetime.now().strftime("%Y%m%d%H%M"))
+                pos_result = gr.Textbox(label="生成结果的列名后缀",placeholder="生成结果列名的后缀",value = '')
                 
 
 

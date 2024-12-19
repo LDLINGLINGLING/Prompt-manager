@@ -35,7 +35,14 @@ def save_prompt_batch(text,task_name):
     return '输入作为提示词保存到{}'.format(file_path)
 
 def read_xlsx(file):
-    df = pd.read_excel(file.name)
+
+    if file.name.endswith('xlsx'):
+        df = pd.read_excel(file.name)
+    elif file.name.endswith('jsonl'):
+        df = pd.read_json(file.name, lines=True)
+    elif file.name.endswith('json'):
+        df = pd.read_json(file.name, lines=True)
+
     return df
 
 def dispaly_top5_rows(df):
@@ -104,7 +111,7 @@ def process_files(processed_text, df, param_input_top_p, param_input_temperture,
         # 输入的模型名称
         model_selection_k = model_selection_button
         model_name = model_selection_k
-    
+    pos_result = '_'+pos_result +'_'+ datetime.now().strftime("%Y%m%d%H%M")
     df[task_name + pos_result] = None
     df[task_name + '_inputs'] = None
     df[task_name +'prompt_template'] = None
@@ -118,26 +125,23 @@ def process_files(processed_text, df, param_input_top_p, param_input_temperture,
 
     # 定义线程池执行的任务
     def process_row(inx, row, input_dic_, model_name, processed_text):
+        
+        cur_instruct = input_dic_
+        cur_instruct['prompt_teamplate'] = processed_text
+        res = main(client=client, input_dic=input_dic_, model=model_config[model_name], query=processed_text,
+                    top_p=float(param_input_top_p), max_tokens=float(param_input_max_tokens),
+                    presence_penalty=float(param_input_repetition), temperature=float(param_input_temperture))
         try:
-            cur_instruct = input_dic_
-            cur_instruct['prompt_teamplate'] = processed_text
-            res = main(client=client, input_dic=input_dic_, model=model_config[model_name], query=processed_text,
-                       top_p=float(param_input_top_p), max_tokens=float(param_input_max_tokens),
-                       presence_penalty=float(param_input_repetition), temperature=float(param_input_temperture))
-            df.loc[inx, task_name + pos_result] = res
+            df.loc[inx, task_name +pos_result] = res
             df.loc[inx, task_name + '_inputs'] = str(cur_instruct)
             df.loc[inx, task_name + 'prompt_template'] = processed_text
-            df.loc[inx, task_name + 'sampling_parma'] = str({'model_name': model_name, 'top_p': param_input_top_p, 
-                                                               'temperature': param_input_temperture, 
-                                                               'repetition_penalty': param_input_repetition})
+            df.loc[inx, task_name + 'sampling_parma'] = str({'model_name': model_name, 'top_p': param_input_top_p,  'temperature': param_input_temperture, 'repetition_penalty': param_input_repetition})
         except Exception as e:
             print(f"Error processing row {inx}: {e}")
             df.loc[inx, task_name + pos_result] = ''
             df.loc[inx, task_name + '_inputs'] = 'error'
             df.loc[inx, task_name + 'prompt_template'] = processed_text
-            df.loc[inx, task_name + 'sampling_parma'] = str({'model_name': model_name, 'top_p': param_input_top_p, 
-                                                               'temperature': param_input_temperture, 
-                                                               'repetition_penalty': param_input_repetition})
+            df.loc[inx, task_name + 'sampling_parma'] = str({'model_name': model_name, 'top_p': param_input_top_p, 'temperature': param_input_temperture, 'repetition_penalty': param_input_repetition})
 
     # 创建一个线程池，限制最大线程数为32
     with concurrent.futures.ThreadPoolExecutor(max_workers=32) as executor:
